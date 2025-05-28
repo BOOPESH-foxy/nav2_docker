@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ros_distro: [humble, jazzy, rolling] 
+        ros_distro: [humble, jazzy, kilted, rolling] 
 
     steps:
       - name: Set up QEMU
@@ -51,8 +51,8 @@ jobs:
       matrix:
         version:
           - { ros_distro: 'humble', main_version: '1', distro_version: '1' }
-          - { ros_distro: 'iron', main_version: '1', distro_version: '2' }
           - { ros_distro: 'jazzy', main_version: '1', distro_version: '3' }
+          - { ros_distro: 'kilted', main_version: '1', distro_version: '4' }
 
     steps:
       - name: Set up QEMU
