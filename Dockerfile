@@ -1,11 +1,6 @@
 ARG ROS_DISTRO=rolling
 FROM osrf/ros:${ROS_DISTRO}-desktop-full
 
-RUN apt update \
-    && DEBIAN_FRONTEND=noninteractive apt install -y --no-install-recommends --no-install-suggests \
-  ros-dev-tools \
-  wget
-
 # Fix ROS 2 keys
 RUN rm /etc/apt/sources.list.d/ros2-latest.list \
   && rm /usr/share/keyrings/ros2-latest-archive-keyring.gpg
@@ -18,6 +13,11 @@ RUN export ROS_APT_SOURCE_VERSION=$(curl -s https://api.github.com/repos/ros-inf
     && apt-get update \
     && apt-get install /tmp/ros2-apt-source.deb \
     && rm -f /tmp/ros2-apt-source.deb
+
+RUN apt update \
+    && DEBIAN_FRONTEND=noninteractive apt install -y --no-install-recommends --no-install-suggests \
+  ros-dev-tools \
+  wget
 
 # Obtain the Nav2 dependencies to build development or distribution workspace against
 WORKDIR /root/nav2_ws
