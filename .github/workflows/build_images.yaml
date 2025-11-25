@@ -148,7 +148,7 @@ jobs:
           echo "Latest version found: $stripped_version"
           echo "version=$stripped_version" >> $GITHUB_OUTPUT
 
-      - name: Build and Push if New
+      - name: Build and Push if New Possible
         if: steps.latest_released_package.outputs.version != steps.get_tag.outputs.highest_tag
         uses: docker/build-push-action@v6
         with:
