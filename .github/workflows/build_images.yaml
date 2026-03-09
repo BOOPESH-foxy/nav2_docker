@@ -9,6 +9,9 @@ on:
     # For developer updates to trigger
     branches:
       - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
   nightly_docker:
@@ -19,6 +22,7 @@ jobs:
       fail-fast: false
       matrix:
         ros_distro: [humble, jazzy, kilted, rolling] 
+        target: [devel, standard, production]
 
     steps:
       - name: Set up QEMU
@@ -31,13 +35,18 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set Lowercase Repo Name
+        run: echo "REPO_LOWER=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          push: true
+          push: ${{ github.event_name != 'pull_request' }}
           pull: true
-          tags: ghcr.io/${{ github.repository }}:${{ matrix.ros_distro }}-nightly
+          tags: ghcr.io/${{ env.REPO_LOWER }}:${{ matrix.ros_distro }}-nightly-${{ matrix.target }}
+          target: ${{ matrix.target }}
           platforms: linux/amd64
+          cache-from: type=gha,scope=${{ matrix.ros_distro }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.ros_distro }}
           build-args: |
             ROS_DISTRO=${{ matrix.ros_distro }}
             BUILD=true
@@ -53,6 +62,7 @@ jobs:
           - { ros_distro: 'humble', main_version: '1', distro_version: '1' }
           - { ros_distro: 'jazzy', main_version: '1', distro_version: '3' }
           - { ros_distro: 'kilted', main_version: '1', distro_version: '4' }
+        target: [devel, standard, production]
 
     steps:
       - name: Set up QEMU
@@ -65,6 +75,8 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set Lowercase Repo Name
+        run: echo "REPO_LOWER=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
       - name: Get Latest Tag to Build
         id: get_tag
         run: |
@@ -152,11 +164,15 @@ jobs:
         if: steps.latest_released_package.outputs.version != steps.get_tag.outputs.highest_tag
         uses: docker/build-push-action@v6
         with:
-          push: true
+          push: ${{ github.event_name != 'pull_request' }}
+          load: ${{ github.event_name == 'pull_request' }}
           pull: true
-          tags: ghcr.io/${{ github.repository }}:${{ matrix.version.ros_distro }}-${{ steps.get_tag.outputs.highest_tag }}
+          tags: ghcr.io/${{ env.REPO_LOWER }}:${{ matrix.version.ros_distro }}-${{ steps.get_tag.outputs.highest_tag }}-${{ matrix.target }}
+          target: ${{ matrix.target }}
           platforms: linux/amd64
+          cache-from: type=gha,scope=${{ matrix.version.ros_distro }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.version.ros_distro }}
           build-args: |
             ROS_DISTRO=${{ matrix.version.ros_distro }}
             BUILD=true
-            VERSION=${{ steps.get_tag.outputs.highest_tag }}
+            VERSION_TAG=${{ steps.get_tag.outputs.highest_tag }}
