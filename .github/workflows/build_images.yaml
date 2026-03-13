@@ -25,8 +25,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ros_distro: [humble, jazzy, kilted, rolling] 
-        target: [devel, standard, production]
+        ros_distro: ${{ github.event_name == 'pull_request' && fromJson('["rolling"]') || fromJson('["humble", "jazzy", "kilted", "rolling"]') }}
+        target: ${{ github.event_name == 'pull_request' && fromJson('["standard"]') || fromJson('["devel","standard","production"]') }}
 
     steps:
       - name: Set up QEMU
@@ -58,6 +58,7 @@ jobs:
   release_docker:
     name: Build and Release Current Nav2 Relased Version of Docker Images
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
 
     strategy:
       fail-fast: false
