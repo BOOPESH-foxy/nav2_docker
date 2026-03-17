@@ -1,6 +1,6 @@
 # Navigation2 Multi-Stage Dockerfile
 #
-# This Dockerfile implements a dual-builder, multi-target architecture to provide
+# This Dockerfile implements a multi-builder, multi-target architecture to provide
 # optimized images for different use cases while maintaining full functionality.
 #
 # Available Targets:
@@ -13,10 +13,15 @@
 #   - production: Headless runtime image for robot deployment
 #                 Excludes GUI/simulation packages, includes only core navigation
 #
+#   - standard-arm64: ARM64 runtime image with core Nav2 packages (install/ only)
+#                    Built on ros-base (no GUI/Gazebo - not available for arm64)
+#                    Suitable for nav2 development and deployment on ARM64 hardware
+#
 # Build Examples:
 #   docker build --target devel -t nav2:devel .
 #   docker build --target standard -t nav2:standard .
 #   docker build --target production -t nav2:production .
+#   docker buildx build --platform linux/arm64 --target standard-arm64 -t nav2:arm64-standard .
 
 ARG ROS_DISTRO=rolling
 
@@ -135,6 +140,75 @@ RUN if [ "${BUILD}" = "true" ]; then \
 
 
 # ==============================================================================
+# BUILDER STAGE: ARM64 Build (for standard-arm64 target)
+# ==============================================================================
+# Builds core Nav2 packages on ros-base for ARM64 hardware.
+# Skips GUI and Gazebo packages which have no ARM64 apt packages.
+FROM ros:${ROS_DISTRO}-ros-base AS builder-arm64
+ARG ROS_DISTRO
+ARG VERSION_TAG=latest
+
+# Install build dependencies
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    ros-dev-tools \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /root/nav2_ws
+RUN mkdir -p src
+
+# Clone Navigation2 source code
+RUN if [ "${ROS_DISTRO}" = "rolling" ]; then \
+      git clone https://github.com/ros-planning/navigation2.git --branch main ./src/navigation2 && \
+      vcs import ./src/ < ./src/navigation2/tools/underlay.repos; \
+    elif [ "${VERSION_TAG}" = "latest" ]; then \
+      git clone https://github.com/ros-planning/navigation2.git --branch ${ROS_DISTRO} ./src/navigation2; \
+    else \
+      git clone https://github.com/ros-planning/navigation2.git --branch ${VERSION_TAG} ./src/navigation2; \
+    fi
+
+# Install build dependencies via rosdep, skipping GUI/Gazebo (no arm64 packages available)
+RUN if [ ! -f /etc/ros/rosdep/sources.list.d/20-default.list ]; then \
+      rosdep init; \
+    fi && rosdep update
+
+RUN apt-get update \
+    && rosdep install -y --ignore-src --from-paths src -r \
+       --skip-keys "slam_toolbox \
+                    turtlebot3_gazebo \
+                    gazebo_ros_pkgs \
+                    ros_gz \
+                    ros_gz_sim \
+                    ros_gz_bridge \
+                    rviz2 \
+                    nav2_rviz_plugins \
+                    nav2_bringup \
+                    nav2_system_tests \
+                    nav2_minimal_tb3_sim \
+                    nav2_minimal_tb4_description \
+                    nav2_minimal_tb4_sim" \
+    && rm -rf /var/lib/apt/lists/*
+
+# Build core Nav2 packages, skip GUI/simulation packages
+ARG BUILD=true
+ARG COLCON_BUILD_ARGS=""
+RUN if [ "${BUILD}" = "true" ]; then \
+      . /opt/ros/${ROS_DISTRO}/setup.sh \
+      && colcon build \
+         --packages-skip nav2_rviz_plugins \
+                         nav2_bringup \
+                         nav2_system_tests \
+                         nav2_minimal_tb3_sim \
+                         nav2_minimal_tb4_description \
+                         nav2_minimal_tb4_sim \
+                         navigation2 \
+         $COLCON_BUILD_ARGS; \
+    else \
+      mkdir -p /root/nav2_ws/install; \
+    fi
+
+
+# ==============================================================================
 # TARGET: devel
 # ==============================================================================
 # Development image with full workspace for active Nav2 development
@@ -216,6 +290,22 @@ RUN apt update && \
     && rm -rf /var/lib/apt/lists/* \
     && rm -rf /usr/share/doc /usr/share/man /root/.ros \
     && rm -rf /root/nav2_ws/src
+
+# Configure workspace to auto-source on container start
+RUN echo 'source "/root/nav2_ws/install/setup.bash"' >> /ros_entrypoint.sh
+
+
+# ==============================================================================
+# TARGET: standard-arm64
+# ==============================================================================
+# ARM64 image with compiled Nav2 binaries for robot development on ARM64 hardware
+# Built on ros-base (GUI/Gazebo excluded - no arm64 apt packages available)
+# Includes: install/ directory (no src/build/log)
+FROM ros:${ROS_DISTRO}-ros-base AS standard-arm64
+ARG ROS_DISTRO
+
+WORKDIR /root/nav2_ws
+COPY --from=builder-arm64 /root/nav2_ws/install /root/nav2_ws/install
 
 # Configure workspace to auto-source on container start
 RUN echo 'source "/root/nav2_ws/install/setup.bash"' >> /ros_entrypoint.sh
