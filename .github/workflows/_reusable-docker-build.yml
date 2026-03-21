@@ -1,0 +1,206 @@
+---
+# reusable workflow for building and pushing docker images for a single architecture.
+# called by docker-release.yml for both AMD64 and ARM64 builds.
+name: Reusable Docker Build
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: "GitHub Actions runner label"
+        required: true
+        type: string
+      platform:
+        description: "Docker platform target (e.g. linux/amd64, linux/arm64)"
+        required: true
+        type: string
+      dockerfile:
+        description: "Path to the Dockerfile"
+        required: true
+        type: string
+      arch_suffix:
+        description: "Suffix appended to image tags only (e.g. '' or '-arm64'). NOT passed to --target."
+        required: false
+        type: string
+        default: ""
+      targets:
+        description: "JSON array of Docker build targets as named in the Dockerfile (e.g. '[\"devel\",\"standard\",\"production\"]')"
+        required: true
+        type: string
+      nightly_distros:
+        description: "JSON array of ROS distros for nightly builds"
+        required: true
+        type: string
+      release_versions:
+        description: JSON array of release version objects, each with ros_distro, main_version, distro_version.
+        required: true
+        type: string
+      enable_qemu:
+        description: "Set up QEMU for cross-platform emulation (true for AMD64, false for native ARM64)"
+        required: false
+        type: boolean
+        default: false
+      push:
+        description: "Whether to push images to the registry"
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+
+  nightly:
+    name: "Nightly | ${{ matrix.ros_distro }} | ${{ matrix.target }}${{ inputs.arch_suffix }}"
+    runs-on: ${{ inputs.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        ros_distro: ${{ fromJson(inputs.nightly_distros) }}
+        target: ${{ fromJson(inputs.targets) }}
+
+    steps:
+      - name: Set up QEMU
+        if: ${{ inputs.enable_qemu }}
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set Lowercase Repo Name
+        run: echo "REPO_LOWER=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          file: ${{ inputs.dockerfile }}
+          push: ${{ inputs.push && github.event_name != 'pull_request' }}
+          load: ${{ github.event_name == 'pull_request' }}
+          pull: true
+          tags: ghcr.io/${{ env.REPO_LOWER }}:${{ matrix.ros_distro }}-nightly-${{ matrix.target }}${{ inputs.arch_suffix }}
+          target: ${{ matrix.target }}
+          platforms: ${{ inputs.platform }}
+          cache-from: type=gha,scope=${{ matrix.ros_distro }}${{ inputs.arch_suffix }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.ros_distro }}${{ inputs.arch_suffix }}
+          build-args: |
+            ROS_DISTRO=${{ matrix.ros_distro }}
+            BUILD=true
+
+  release:
+    name: "Release | ${{ matrix.version.ros_distro }} | ${{ matrix.target }}${{ inputs.arch_suffix }}"
+    runs-on: ${{ inputs.runner }}
+    if: ${{ github.event_name != 'pull_request' }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ${{ fromJson(inputs.release_versions) }}
+        target: ${{ fromJson(inputs.targets) }}
+
+    steps:
+      - name: Set up QEMU
+        if: ${{ inputs.enable_qemu }}
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set Lowercase Repo Name
+        run: echo "REPO_LOWER=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
+
+      - name: Get Latest Tag to Build
+        id: get_tag
+        run: |
+          tags=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/ros-navigation/navigation2/tags | \
+            jq -r '.[].name')
+
+          filtered_tags=$(echo "$tags" | grep '^${{ matrix.version.main_version }}\.${{ matrix.version.distro_version }}\.[0-9]*$')
+
+          highest_tag=$(echo "$filtered_tags" | sort -V | tail -n 1)
+          echo "Highest tag: $highest_tag"
+          echo "highest_tag=$highest_tag" >> $GITHUB_OUTPUT
+
+      - name: Get Latest Package Version Already Built
+        id: latest_released_package
+        run: |
+          page=1
+          per_page=100
+          all_tags=""
+          while true; do
+            echo "Fetching page $page"
+            response=$(curl -s -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/orgs/ros-navigation/packages/container/nav2_docker/versions?per_page=$per_page&page=$page")
+
+            if [ "$(echo "$response" | jq length)" -eq 0 ]; then
+              echo "No more versions found, stopping pagination."
+              break
+            fi
+
+            ros_distro="${{ matrix.version.ros_distro }}"
+            main_version="${{ matrix.version.main_version }}"
+            distro_version="${{ matrix.version.distro_version }}"
+
+            echo "ROS_DISTRO: $ros_distro"
+            echo "MAIN_VERSION: $main_version"
+            echo "DISTRO_VERSION: $distro_version"
+
+            extracted_tags=$(echo "$response" | jq -r '.[] | .metadata.container.tags[]')
+            echo "Extracted tags: $extracted_tags"
+
+            matching_tags=$(echo "$extracted_tags" | grep -E "^${ros_distro}-${main_version}\.${distro_version}\." || true)
+            echo "Matching Tags: $matching_tags"
+
+            all_tags="$all_tags"$'\n'"$matching_tags"
+            echo "All tags found: $all_tags"
+
+            page=$((page + 1))
+            echo "new page: $page"
+          done
+
+          echo "All collected tags:"
+          echo "$all_tags"
+
+          latest_version=$(echo "$all_tags" | sort -V | tail -n 1)
+
+          if [ -z "$latest_version" ]; then
+            echo "Error: No matching package versions found."
+            exit 1  # Comment this line out on first build of a release
+          fi
+
+          echo "Latest version found: $latest_version"
+          stripped_version=$(echo "$latest_version" | cut -d '-' -f 2-)
+          echo "Latest version found: $stripped_version"
+          echo "version=$stripped_version" >> $GITHUB_OUTPUT
+
+      - name: Build and Push if New Version Available
+        if: steps.latest_released_package.outputs.version != steps.get_tag.outputs.highest_tag
+        uses: docker/build-push-action@v6
+        with:
+          file: ${{ inputs.dockerfile }}
+          push: ${{ inputs.push && github.event_name != 'pull_request' }}
+          load: ${{ github.event_name == 'pull_request' }}
+          pull: true
+          tags: ghcr.io/${{ env.REPO_LOWER }}:${{ matrix.version.ros_distro }}-${{ steps.get_tag.outputs.highest_tag }}-${{ matrix.target }}${{ inputs.arch_suffix }}
+          target: ${{ matrix.target }}
+          platforms: ${{ inputs.platform }}
+          cache-from: type=gha,scope=${{ matrix.version.ros_distro }}${{ inputs.arch_suffix }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.version.ros_distro }}${{ inputs.arch_suffix }}
+          build-args: |
+            ROS_DISTRO=${{ matrix.version.ros_distro }}
+            BUILD=true
+            VERSION_TAG=${{ steps.get_tag.outputs.highest_tag }}

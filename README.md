@@ -42,6 +42,9 @@ docker pull ghcr.io/ros-navigation/nav2_docker:jazzy-nightly-production
 
 # For ARM64 Hardware (core Nav2, no GUI/Gazebo)
 docker pull ghcr.io/ros-navigation/nav2_docker:jazzy-nightly-standard-arm64
+
+# For a specific released version (all tiers follow the same pattern)
+docker pull ghcr.io/ros-navigation/nav2_docker:jazzy-1.3.5-standard-arm64
 ```
 
 ## Local Development
@@ -67,21 +70,28 @@ Navigate to /root/nav2_ws within the container to find the complete source, buil
 
 ## Building for Local Use
 
-You can build specific image tiers locally by using the `--target` flag. The Dockerfile uses a dual-builder architecture: `builder-full` compiles all packages (for devel/standard), while `builder-production` compiles only core navigation packages (for production).
+You can build specific image tiers locally by using the `--target` flag. The project uses separate Dockerfiles for different architectures:
+
+- `docker/Dockerfile` - x86_64 builds with three tiers (devel, standard, production)
+- `docker/Dockerfile.arm64` - ARM64 builds optimized for embedded hardware
+
+The x86_64 Dockerfile uses a dual-builder architecture: `builder-full` compiles all packages (for devel/standard), while `builder-production` compiles only core navigation packages (for production).
 
 ### Building Specific Tiers
 To build a specific version locally from the root of this repository:
 
 ```bash
 # Build the lean Production image (Headless - core navigation only)
-sudo docker build --target production -t nav2:local-prod .
+sudo docker build -f docker/Dockerfile --target production -t nav2:local-prod .
 
 # Build the full Development image (Includes source code and all packages)
-sudo docker build --target devel -t nav2:local-devel .
+sudo docker build -f docker/Dockerfile --target devel -t nav2:local-devel .
 
 # Build the Standard image (Includes GUI tools/Sim, no source)
-sudo docker build --target standard -t nav2:local-standard .
+sudo docker build -f docker/Dockerfile --target standard -t nav2:local-standard .
 
+# Build the ARM64 standard image (requires buildx)
+sudo docker buildx build --platform linux/arm64 -f docker/Dockerfile.arm64 --target standard-arm64 -t nav2:local-arm64 .
 ```
 
 **Note:** The production image excludes visualization and simulation packages (`nav2_rviz_plugins`, `nav2_bringup`, `nav2_system_tests`, TurtleBot simulation packages) to minimize size. All core navigation functionality (controllers, planners, costmaps, localization, etc.) is included.
@@ -101,40 +111,13 @@ If the upstream OSRF images have changed significantly, it is recommended to pul
 ```bash
 # Example for Rolling
 sudo docker pull osrf/ros:rolling-desktop-full
-sudo docker build -t nav2:local -f Dockerfile .
+sudo docker build -f docker/Dockerfile -t nav2:local .
 ```
 
 ## ARM64 Support
 
 ARM64 images are provided for robot deployment and development on ARM64 hardware (e.g., NVIDIA Jetson, Raspberry Pi 4/5, Apple Silicon). These images are built natively on ARM64 runners and are available for all supported distributions.
 
-> **Note:** `osrf/ros:*-desktop-full` does not provide ARM64 packages. ARM64 images are therefore built on `ros:*-ros-base` and exclude GUI and Gazebo simulation tools.
-
-### Pulling an ARM64 Image
-
-```bash
-# Nightly build
-docker pull ghcr.io/ros-navigation/nav2_docker:jazzy-nightly-standard-arm64
-
-# Specific released version
-docker pull ghcr.io/ros-navigation/nav2_docker:jazzy-1.3.5-standard-arm64
-```
-
-### Running on ARM64 Hardware
-
-```bash
-sudo docker run -it --net=host --privileged \
-  ghcr.io/ros-navigation/nav2_docker:jazzy-nightly-standard-arm64
-```
-
-### Building ARM64 Locally
-
-```bash
-# Build the ARM64 standard image locally
-sudo docker buildx build --platform linux/arm64 --target standard-arm64 \
-  -t nav2:local-arm64 .
-```
-
-**Note:** The ARM64 image includes all core navigation packages (controllers, planners, costmaps, localization, behavior trees, etc.) but excludes `nav2_rviz_plugins`, `nav2_bringup`, simulation packages, and Gazebo-related dependencies that have no ARM64 apt packages available.
+> **Note:** `osrf/ros:*-desktop-full` does not provide ARM64 packages. ARM64 images are therefore built on `ros:*-ros-base` and exclude GUI and Gazebo simulation tools. All core navigation packages (controllers, planners, costmaps, localization, behavior trees, etc.) are included, but `nav2_rviz_plugins`, `nav2_bringup`, simulation packages, and Gazebo-related dependencies are excluded.
 
 From that point on, the instructions above for local development use may be followed.
