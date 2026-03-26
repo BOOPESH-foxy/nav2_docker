@@ -1,6 +1,6 @@
 # Navigation2 Multi-Stage Dockerfile
 #
-# This Dockerfile implements a multi-builder, multi-target architecture to provide
+# This Dockerfile implements a dual-builder, multi-target architecture to provide
 # optimized images for different use cases while maintaining full functionality.
 #
 # Available Targets:

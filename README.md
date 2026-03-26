@@ -31,6 +31,12 @@ To optimize for different robotics workflows, we provide three specialized tiers
 
 ### Pulling an Image
 ```bash
+# For a specific released version (all tiers follow the same pattern)
+docker pull ghcr.io/ros-navigation/nav2_docker:jazzy-1.3.5-devel
+
+# For a specific released version of arm64 (all tiers follow the same pattern)
+docker pull ghcr.io/ros-navigation/nav2_docker:jazzy-1.3.5-standard-arm64
+
 # For Nav2 Developers (cloned source included)
 docker pull ghcr.io/ros-navigation/nav2_docker:jazzy-nightly-devel
 
@@ -42,9 +48,6 @@ docker pull ghcr.io/ros-navigation/nav2_docker:jazzy-nightly-production
 
 # For ARM64 Hardware (core Nav2, no GUI/Gazebo)
 docker pull ghcr.io/ros-navigation/nav2_docker:jazzy-nightly-standard-arm64
-
-# For a specific released version (all tiers follow the same pattern)
-docker pull ghcr.io/ros-navigation/nav2_docker:jazzy-1.3.5-standard-arm64
 ```
 
 ## Local Development
