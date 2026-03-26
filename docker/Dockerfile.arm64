@@ -5,11 +5,11 @@
 #
 # Available Targets:
 #   - builder-arm64: ARM64 builder stage with core Nav2 packages
-#   - standard-arm64: ARM64 runtime image with core Nav2 packages (install/ only)
-#                     Suitable for nav2 development and deployment on ARM64 hardware
+#   - standard: ARM64 runtime image with core Nav2 packages (install/ only)
+#               Suitable for nav2 development and deployment on ARM64 hardware
 #
 # Build Examples:
-#   docker buildx build --platform linux/arm64 -f docker/Dockerfile.arm64 --target standard-arm64 -t nav2:arm64-standard .
+#   docker buildx build --platform linux/arm64 -f docker/Dockerfile.arm64 --target standard -t nav2:arm64-standard .
 
 ARG ROS_DISTRO=rolling
 
@@ -83,12 +83,12 @@ RUN if [ "${BUILD}" = "true" ]; then \
 
 
 # ==============================================================================
-# TARGET: standard-arm64
+# TARGET: standard
 # ==============================================================================
 # ARM64 image with compiled Nav2 binaries for robot development on ARM64 hardware
 # Built on ros-base (GUI/Gazebo excluded - no arm64 apt packages available)
 # Includes: install/ directory (no src/build/log)
-FROM ros:${ROS_DISTRO}-ros-base AS standard-arm64
+FROM ros:${ROS_DISTRO}-ros-base AS standard
 ARG ROS_DISTRO
 
 WORKDIR /root/nav2_ws

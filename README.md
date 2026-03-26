@@ -94,7 +94,7 @@ sudo docker build -f docker/Dockerfile --target devel -t nav2:local-devel .
 sudo docker build -f docker/Dockerfile --target standard -t nav2:local-standard .
 
 # Build the ARM64 standard image (requires buildx)
-sudo docker buildx build --platform linux/arm64 -f docker/Dockerfile.arm64 --target standard-arm64 -t nav2:local-arm64 .
+sudo docker buildx build --platform linux/arm64 -f docker/Dockerfile.arm64 --target standard -t nav2:local-arm64 .
 ```
 
 **Note:** The production image excludes visualization and simulation packages (`nav2_rviz_plugins`, `nav2_bringup`, `nav2_system_tests`, TurtleBot simulation packages) to minimize size. All core navigation functionality (controllers, planners, costmaps, localization, etc.) is included.
