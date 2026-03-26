@@ -14,9 +14,11 @@
 #                 Excludes GUI/simulation packages, includes only core navigation
 #
 # Build Examples:
-#   docker build --target devel -t nav2:devel .
-#   docker build --target standard -t nav2:standard .
-#   docker build --target production -t nav2:production .
+#   docker build -f docker/Dockerfile --target devel -t nav2:devel .
+#   docker build -f docker/Dockerfile --target standard -t nav2:standard .
+#   docker build -f docker/Dockerfile --target production -t nav2:production .
+#
+# For ARM64 builds, see docker/Dockerfile.arm64
 
 ARG ROS_DISTRO=rolling
 
@@ -66,7 +68,6 @@ RUN if [ "${BUILD}" = "true" ]; then \
     else \
       mkdir -p /root/nav2_ws/install; \
     fi
-
 
 # ==============================================================================
 # BUILDER STAGE: Production Build (for production target)
