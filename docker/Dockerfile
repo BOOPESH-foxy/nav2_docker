@@ -49,14 +49,24 @@ RUN if [ "${ROS_DISTRO}" = "rolling" ]; then \
       git clone https://github.com/ros-planning/navigation2.git --branch ${VERSION_TAG} ./src/navigation2; \
     fi
 
-# Install build dependencies via rosdep
+# skipping rosdep update for rolling on noble to avoid out-of-sync Plucky (26.04) keys
 RUN if [ ! -f /etc/ros/rosdep/sources.list.d/20-default.list ]; then \
       rosdep init; \
-    fi && rosdep update
+    fi && \
+    if [ "${ROS_DISTRO}" != "rolling" ]; then \
+      rosdep update; \
+    fi
+
+# backward_ros for older distros, ament_cmake source for Rolling (vendor pkg missing on Noble)
+RUN if [ "${ROS_DISTRO}" != "rolling" ]; then \
+      git clone https://github.com/pal-robotics/backward_ros.git --branch foxy-devel ./src/backward_ros; \
+    else \
+      git clone https://github.com/ament/ament_cmake.git --branch rolling ./src/ament_cmake; \
+    fi
 
 RUN apt update && apt upgrade -y \
     && rosdep install -y --ignore-src --from-paths src -r \
-       --skip-keys "slam_toolbox turtlebot3_gazebo" \
+       --skip-keys "slam_toolbox turtlebot3_gazebo backward_ros geographic_msgs ament_cmake_vendor_package" \
     && rm -rf /var/lib/apt/lists/*
 
 # Build all Nav2 packages
@@ -96,10 +106,20 @@ RUN if [ "${ROS_DISTRO}" = "rolling" ]; then \
       git clone https://github.com/ros-planning/navigation2.git --branch ${VERSION_TAG} ./src/navigation2; \
     fi
 
-# Install build dependencies, excluding GUI/simulation packages
+# skipping rosdep update for rolling on noble to avoid out-of-sync Plucky (26.04) keys
 RUN if [ ! -f /etc/ros/rosdep/sources.list.d/20-default.list ]; then \
       rosdep init; \
-    fi && rosdep update
+    fi && \
+    if [ "${ROS_DISTRO}" != "rolling" ]; then \
+      rosdep update; \
+    fi
+
+# backward_ros for older distros, ament_cmake source for Rolling (vendor pkg missing on Noble)
+RUN if [ "${ROS_DISTRO}" != "rolling" ]; then \
+      git clone https://github.com/pal-robotics/backward_ros.git --branch foxy-devel ./src/backward_ros; \
+    else \
+      git clone https://github.com/ament/ament_cmake.git --branch rolling ./src/ament_cmake; \
+    fi
 
 RUN apt update && apt upgrade -y \
     && rosdep install -y --ignore-src --from-paths src -r \
@@ -113,7 +133,10 @@ RUN apt update && apt upgrade -y \
                     nav2_system_tests \
                     nav2_minimal_tb3_sim \
                     nav2_minimal_tb4_description \
-                    nav2_minimal_tb4_sim" \
+                    nav2_minimal_tb4_sim \
+                    backward_ros \
+                    geographic_msgs \
+                    ament_cmake_vendor_package" \
     && rm -rf /var/lib/apt/lists/*
 
 # Build core Nav2 packages only, skip GUI/simulation packages
@@ -196,10 +219,14 @@ RUN cd /root/nav2_ws/src/navigation2 && \
 
 # Install runtime dependencies for core navigation packages only
 # Explicitly skip GUI, Gazebo, and simulation dependencies
+# skipping rosdep update for rolling on noble to avoid out-of-sync plucky (26.04) keys
 RUN apt update && \
     if [ ! -f /etc/ros/rosdep/sources.list.d/20-default.list ]; then \
       rosdep init; \
-    fi && rosdep update && \
+    fi && \
+    if [ "${ROS_DISTRO}" != "rolling" ]; then \
+      rosdep update; \
+    fi && \
     rosdep install -y --ignore-src --from-paths src -r --rosdistro ${ROS_DISTRO} \
     -t exec \
     --skip-keys "rviz2 \
@@ -215,6 +242,9 @@ RUN apt update && \
                  nav2_minimal_tb3_sim \
                  nav2_minimal_tb4_description \
                  nav2_minimal_tb4_sim \
+                 backward_ros \
+                 geographic_msgs \
+                 ament_cmake_vendor_package \
                  libqt5-core libqt5gui5 libqt5widgets5 \
                  libgl1-mesa-dri mesa-utils x11-common" \
     && rm -rf /var/lib/apt/lists/* \

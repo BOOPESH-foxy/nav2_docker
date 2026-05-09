@@ -42,9 +42,21 @@ RUN if [ "${ROS_DISTRO}" = "rolling" ]; then \
     fi
 
 # Install build dependencies via rosdep, skipping GUI/Gazebo (no arm64 packages available)
+# Workaround: Skipping rosdep update for Rolling on Noble to avoid out-of-sync Plucky (26.04) keys,
+# as per Nav2 CI standards.
 RUN if [ ! -f /etc/ros/rosdep/sources.list.d/20-default.list ]; then \
       rosdep init; \
-    fi && rosdep update
+    fi && \
+    if [ "${ROS_DISTRO}" != "rolling" ]; then \
+      rosdep update; \
+    fi
+
+# backward_ros for older distros, ament_cmake source for Rolling (vendor pkg missing on Noble)
+RUN if [ "${ROS_DISTRO}" != "rolling" ]; then \
+      git clone https://github.com/pal-robotics/backward_ros.git --branch foxy-devel ./src/backward_ros; \
+    else \
+      git clone https://github.com/ament/ament_cmake.git --branch rolling ./src/ament_cmake; \
+    fi
 
 RUN apt-get update \
     && rosdep install -y --ignore-src --from-paths src -r \
@@ -60,7 +72,10 @@ RUN apt-get update \
                     nav2_system_tests \
                     nav2_minimal_tb3_sim \
                     nav2_minimal_tb4_description \
-                    nav2_minimal_tb4_sim" \
+                    nav2_minimal_tb4_sim \
+                    backward_ros \
+                    geographic_msgs \
+                    ament_cmake_vendor_package" \
     && rm -rf /var/lib/apt/lists/*
 
 # Build core Nav2 packages, skip GUI/simulation packages
